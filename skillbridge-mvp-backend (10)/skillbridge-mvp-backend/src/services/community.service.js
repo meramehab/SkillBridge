@@ -57,11 +57,16 @@ const addComment = async (postId, authorId, content) => {
 };
 
 // تحديد إجابة مقبولة (للأسئلة) - بيقفل السؤال ويعتبره Resolved
-const acceptAnswer = async (postId, commentId) => {
+const acceptAnswer = async (postId, commentId, userAuth) => {
   const post = await Post.findById(postId);
   if (!post) {
     const error = new Error('السؤال مش موجود');
     error.statusCode = 404;
+    throw error;
+  }
+  if (post.author.toString() !== userAuth.id && userAuth.role !== 'admin') {
+    const error = new Error('غير مصرح لك بقبول إجابة على هذا السؤال');
+    error.statusCode = 403;
     throw error;
   }
 
@@ -73,13 +78,19 @@ const acceptAnswer = async (postId, commentId) => {
   return post;
 };
 
-const deletePost = async (postId) => {
-  const post = await Post.findByIdAndDelete(postId);
-  if (!post) {
+const deletePost = async (postId, userAuth) => {
+  const existingPost = await Post.findById(postId);
+  if (!existingPost) {
     const error = new Error('المنشور مش موجود');
     error.statusCode = 404;
     throw error;
   }
+  if (existingPost.author.toString() !== userAuth.id && userAuth.role !== 'admin') {
+    const error = new Error('غير مصرح لك بحذف هذا المنشور');
+    error.statusCode = 403;
+    throw error;
+  }
+  const post = await Post.findByIdAndDelete(postId);
   return post;
 };
 

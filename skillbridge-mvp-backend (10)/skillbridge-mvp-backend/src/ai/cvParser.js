@@ -13,12 +13,17 @@ const SKILLS_DB = [
 ];
 
 // استخراج النص من ملف PDF مع معالجة آمنة لأخطاء XRef المعقدة
-const extractTextFromPDF = async (filePath) => {
+const extractTextFromPDF = async (fileInput) => {
   try {
-    if (!fs.existsSync(filePath)) {
-      return '';
+    let dataBuffer;
+    if (Buffer.isBuffer(fileInput)) {
+      dataBuffer = fileInput;
+    } else {
+      if (!fs.existsSync(fileInput)) {
+        return '';
+      }
+      dataBuffer = fs.readFileSync(fileInput);
     }
-    const dataBuffer = fs.readFileSync(filePath);
     if (!dataBuffer || dataBuffer.length === 0) {
       return '';
     }

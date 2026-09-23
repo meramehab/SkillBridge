@@ -20,7 +20,7 @@ const addListing = async (req, res) => {
 
 const updateListing = async (req, res) => {
   try {
-    const listing = await marketplaceService.updateMarketplaceListing(req.params.id, req.body);
+    const listing = await marketplaceService.updateMarketplaceListing(req.params.id, req.body, req.user);
     res.status(200).json({ success: true, data: listing });
   } catch (error) {
     res.status(error.statusCode || 500).json({ success: false, message: error.message });
@@ -29,7 +29,7 @@ const updateListing = async (req, res) => {
 
 const removeListing = async (req, res) => {
   try {
-    await marketplaceService.removeMarketplaceListing(req.params.id);
+    await marketplaceService.removeMarketplaceListing(req.params.id, req.user);
     res.status(200).json({ success: true, message: 'تم حذف الخدمة/المشروع' });
   } catch (error) {
     res.status(error.statusCode || 500).json({ success: false, message: error.message });

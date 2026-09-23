@@ -29,23 +29,35 @@ const addMarketplaceListing = async (clientId, data) => {
   return Project.create({ ...data, client: clientId });
 };
 
-const updateMarketplaceListing = async (id, updates) => {
-  const project = await Project.findByIdAndUpdate(id, updates, { new: true, runValidators: true });
-  if (!project) {
+const updateMarketplaceListing = async (id, updates, user) => {
+  const existingProject = await Project.findById(id);
+  if (!existingProject) {
     const error = new Error('الخدمة/المشروع مش موجود');
     error.statusCode = 404;
     throw error;
   }
+  if (existingProject.client.toString() !== user.id && user.role !== 'admin') {
+    const error = new Error('غير مصرح لك بتعديل هذه الخدمة/المشروع');
+    error.statusCode = 403;
+    throw error;
+  }
+  const project = await Project.findByIdAndUpdate(id, updates, { new: true, runValidators: true });
   return project;
 };
 
-const removeMarketplaceListing = async (id) => {
-  const project = await Project.findByIdAndDelete(id);
-  if (!project) {
+const removeMarketplaceListing = async (id, user) => {
+  const existingProject = await Project.findById(id);
+  if (!existingProject) {
     const error = new Error('الخدمة/المشروع مش موجود');
     error.statusCode = 404;
     throw error;
   }
+  if (existingProject.client.toString() !== user.id && user.role !== 'admin') {
+    const error = new Error('غير مصرح لك بحذف هذه الخدمة/المشروع');
+    error.statusCode = 403;
+    throw error;
+  }
+  const project = await Project.findByIdAndDelete(id);
   return project;
 };
 

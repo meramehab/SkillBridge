@@ -19,7 +19,7 @@ export async function uploadStudentId(file) {
   const formData = new FormData();
   formData.append("studentCardImage", file);
 
-  const { data } = await apiClient.post("/verification/upload-id", formData);
+  const { data } = await apiClient.post("/university/upload-id", formData);
   return data;
 }
 
@@ -32,6 +32,6 @@ export async function confirmStudentVerification(verificationData) {
     return mockConfirmVerification(verificationData);
   }
 
-  const { data } = await apiClient.post("/verification/confirm", verificationData);
+  const { data } = await apiClient.post("/university/verify", verificationData);
   return data;
 }

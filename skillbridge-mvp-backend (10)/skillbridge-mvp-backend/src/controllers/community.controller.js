@@ -48,7 +48,7 @@ const addComment = async (req, res) => {
 
 const acceptAnswer = async (req, res) => {
   try {
-    const post = await communityService.acceptAnswer(req.params.id, req.params.commentId);
+    const post = await communityService.acceptAnswer(req.params.id, req.params.commentId, req.user);
     res.status(200).json({ success: true, data: post });
   } catch (error) {
     res.status(error.statusCode || 500).json({ success: false, message: error.message });
@@ -57,7 +57,7 @@ const acceptAnswer = async (req, res) => {
 
 const deletePost = async (req, res) => {
   try {
-    await communityService.deletePost(req.params.id);
+    await communityService.deletePost(req.params.id, req.user);
     res.status(200).json({ success: true, message: 'تم حذف المنشور' });
   } catch (error) {
     res.status(error.statusCode || 500).json({ success: false, message: error.message });

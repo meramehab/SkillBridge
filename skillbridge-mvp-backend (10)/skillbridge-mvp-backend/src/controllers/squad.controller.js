@@ -52,7 +52,7 @@ const leaveSquad = async (req, res) => {
 
 const disbandSquad = async (req, res) => {
   try {
-    const squad = await squadService.disbandSquad(req.params.id);
+    const squad = await squadService.disbandSquad(req.params.id, req.user);
     res.status(200).json({ success: true, data: squad });
   } catch (error) {
     res.status(error.statusCode || 500).json({ success: false, message: error.message });

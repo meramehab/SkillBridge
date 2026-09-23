@@ -39,7 +39,7 @@ export const aiService = {
 
     const formData = new FormData();
     formData.append("cv", file);
-    const { data } = await apiClient.post("/ai/analyze-cv", formData);
+    const { data } = await apiClient.post("/ai/cv/analyze", formData);
     return data;
   },
 
@@ -62,7 +62,7 @@ export const aiService = {
         feedback: "أداء ممتاز! أتقنت المهارات الأساسية والتطبيق العملي بنجاح."
       };
     }
-    const { data } = await apiClient.post("/ai/verify-skill", { skillName, ...assessmentData });
+    const { data } = await apiClient.post("/ai/assess-task", { skillName, ...assessmentData });
     return data;
   },
 
@@ -77,7 +77,7 @@ export const aiService = {
         ]
       };
     }
-    const { data } = await apiClient.post("/ai/generate-quiz", { skillName, level });
+    const { data } = await apiClient.get(`/ai/quiz/${encodeURIComponent(skillName)}?count=3`);
     return data;
   },
 
@@ -86,7 +86,7 @@ export const aiService = {
       await simulateNetworkDelay(900);
       return { score: 90, feedback: "كود منظم ويتبع أفضل الممارسات." };
     }
-    const { data } = await apiClient.post("/ai/review-code", { code, language });
+    const { data } = await apiClient.post("/ai/code/analyze", { code, language });
     return data;
   },
 
@@ -95,7 +95,7 @@ export const aiService = {
       await simulateNetworkDelay(700);
       return { matchedSquads: [] };
     }
-    const { data } = await apiClient.post("/ai/match-team", { projectId });
+    const { data } = await apiClient.post("/squads/suggest-members", { projectId });
     return data;
   }
 };

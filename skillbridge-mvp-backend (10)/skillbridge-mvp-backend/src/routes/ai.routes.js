@@ -10,7 +10,14 @@ const { protect, authorize } = require('../middleware/auth');
 const storage = multer.memoryStorage();
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB كحد أقصى
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB كحد أقصى
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('غير مسموح برفع هذا النوع من الملفات. يرجى رفع ملف PDF.'), false);
+    }
+  }
 });
 
 // 3. استيراد الموديلات الأساسية لضمان عدم حدوث ReferenceError
@@ -30,6 +37,14 @@ const handleCVAnalysis = async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ success: false, message: 'لازم ترفع ملف الـ CV' });
+    }
+
+    // التحقق الأمني من الـ Magic Bytes لضمان أنه ملف PDF حقيقي وليس ملف خبيث متنكر
+    if (req.file.buffer && req.file.buffer.length >= 4) {
+      const magicBytes = req.file.buffer.toString('hex', 0, 4);
+      if (magicBytes !== '25504446') { // %PDF
+        return res.status(400).json({ success: false, message: 'محتوى الملف تالف أو غير مدعوم. يرجى رفع ملف PDF صالح.' });
+      }
     }
 
     // Extract text using safe pdf-parse fallback
@@ -256,4 +271,15 @@ router.get('/jury/:disputeId', protect, authorize && authorize('admin') ? author
   }
 });
 
-module.exports = router; 
+// ---------- AI Chatbot ----------
+router.post('/chatbot', protect, async (req, res) => {
+  try {
+    const { message, sessionId } = req.body;
+    const reply = await chatbot.handleUserMessage(req.user.id, message, sessionId);
+    res.status(200).json({ success: true, data: { reply } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+module.exports = router;

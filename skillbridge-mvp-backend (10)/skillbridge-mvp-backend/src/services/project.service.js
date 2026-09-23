@@ -29,40 +29,58 @@ const getProjectById = async (id) => {
   return project;
 };
 
-const updateProject = async (id, updates) => {
-  const project = await Project.findByIdAndUpdate(id, updates, {
-    new: true,
-    runValidators: true,
-  });
-  if (!project) {
+const updateProject = async (id, updates, user) => {
+  const existingProject = await Project.findById(id);
+  if (!existingProject) {
     const error = new Error('المشروع مش موجود');
     error.statusCode = 404;
     throw error;
   }
+  if (existingProject.client.toString() !== user.id && user.role !== 'admin') {
+    const error = new Error('غير مصرح لك بتعديل هذا المشروع');
+    error.statusCode = 403;
+    throw error;
+  }
+  const project = await Project.findByIdAndUpdate(id, updates, {
+    new: true,
+    runValidators: true,
+  });
   return project;
 };
 
-const assignProject = async (id, { assignedTo, assignedSquad }) => {
+const assignProject = async (id, { assignedTo, assignedSquad }, user) => {
+  const existingProject = await Project.findById(id);
+  if (!existingProject) {
+    const error = new Error('المشروع مش موجود');
+    error.statusCode = 404;
+    throw error;
+  }
+  if (existingProject.client.toString() !== user.id && user.role !== 'admin') {
+    const error = new Error('غير مصرح لك بتعيين هذا المشروع');
+    error.statusCode = 403;
+    throw error;
+  }
   const project = await Project.findByIdAndUpdate(
     id,
     { assignedTo, assignedSquad, status: 'in_progress' },
     { new: true }
   );
-  if (!project) {
-    const error = new Error('المشروع مش موجود');
-    error.statusCode = 404;
-    throw error;
-  }
   return project;
 };
 
-const deleteProject = async (id) => {
-  const project = await Project.findByIdAndDelete(id);
-  if (!project) {
+const deleteProject = async (id, user) => {
+  const existingProject = await Project.findById(id);
+  if (!existingProject) {
     const error = new Error('المشروع مش موجود');
     error.statusCode = 404;
     throw error;
   }
+  if (existingProject.client.toString() !== user.id && user.role !== 'admin') {
+    const error = new Error('غير مصرح لك بحذف هذا المشروع');
+    error.statusCode = 403;
+    throw error;
+  }
+  const project = await Project.findByIdAndDelete(id);
   return project;
 };
 

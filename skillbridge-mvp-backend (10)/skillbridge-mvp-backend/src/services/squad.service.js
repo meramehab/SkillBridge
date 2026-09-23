@@ -61,13 +61,19 @@ const leaveSquad = async (squadId, userId) => {
   return squad;
 };
 
-const disbandSquad = async (squadId) => {
-  const squad = await Squad.findByIdAndUpdate(squadId, { status: 'disbanded' }, { new: true });
-  if (!squad) {
+const disbandSquad = async (squadId, userAuth) => {
+  const existingSquad = await Squad.findById(squadId);
+  if (!existingSquad) {
     const error = new Error('الفريق مش موجود');
     error.statusCode = 404;
     throw error;
   }
+  if (existingSquad.leader.toString() !== userAuth.id && userAuth.role !== 'admin') {
+    const error = new Error('غير مصرح لك بإنهاء هذا الفريق');
+    error.statusCode = 403;
+    throw error;
+  }
+  const squad = await Squad.findByIdAndUpdate(squadId, { status: 'disbanded' }, { new: true });
   return squad;
 };
 

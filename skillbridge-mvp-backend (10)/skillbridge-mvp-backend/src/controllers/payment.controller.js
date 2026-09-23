@@ -19,7 +19,7 @@ const createEscrowPayment = async (req, res) => {
 const releaseEscrowPayment = async (req, res) => {
   try {
     const { studentId } = req.body;
-    const payment = await paymentService.releaseEscrowPayment(req.params.id, studentId);
+    const payment = await paymentService.releaseEscrowPayment(req.params.id, studentId, req.user);
     res.status(200).json({ success: true, data: payment });
   } catch (error) {
     res.status(error.statusCode || 500).json({ success: false, message: error.message });
@@ -184,7 +184,7 @@ const verifyPayment = async (req, res) => {
       transactionId,
       paymentId,
       status: status || 'completed',
-    });
+    }, req.user);
 
     res.status(200).json({
       success: true,

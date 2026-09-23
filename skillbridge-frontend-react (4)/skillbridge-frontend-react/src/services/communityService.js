@@ -27,7 +27,7 @@ export async function getCommunityFeed(page = 1, limit = 10) {
     return mockGetCommunityFeed(page, limit);
   }
 
-  const { data } = await apiClient.get("/community/posts", {
+  const { data } = await apiClient.get("/community", {
     params: { page, limit }
   });
   return data;
@@ -45,7 +45,7 @@ export async function createPost(postData) {
     return mockCreatePost(postData);
   }
 
-  const { data } = await apiClient.post("/community/posts", postData);
+  const { data } = await apiClient.post("/community", postData);
   return data;
 }
 
@@ -58,7 +58,7 @@ export async function togglePostLike(postId) {
     return mockTogglePostLike(postId);
   }
 
-  const { data } = await apiClient.post(`/community/posts/${postId}/like`, {});
+  const { data } = await apiClient.put(`/community/${postId}/like`, {});
   return data;
 }
 
@@ -72,7 +72,7 @@ export async function addComment(postId, content) {
     return mockAddComment(postId, content);
   }
 
-  const { data } = await apiClient.post(`/community/posts/${postId}/comments`, { content });
+  const { data } = await apiClient.post(`/community/${postId}/comments`, { content });
   return data;
 }
 
@@ -85,7 +85,7 @@ export async function getComments(postId) {
     return mockGetComments(postId);
   }
 
-  const { data } = await apiClient.get(`/community/posts/${postId}/comments`);
+  const { data } = await apiClient.get(`/community/${postId}`);
   return data;
 }
 

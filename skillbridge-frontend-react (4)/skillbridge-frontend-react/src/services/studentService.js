@@ -41,7 +41,7 @@ export async function getStudentDashboardData() {
     };
   }
 
-  const { data } = await apiClient.get("/student/dashboard");
+  const { data } = await apiClient.get("/student-dashboard");
   return data;
 }
 

@@ -14,7 +14,13 @@ const getUserById = async (id) => {
   return user;
 };
 
-const updateUser = async (id, updates) => {
+const updateUser = async (id, updates, userAuth) => {
+  if (id.toString() !== userAuth.id && userAuth.role !== 'admin') {
+    const error = new Error('غير مصرح لك بتعديل بيانات هذا المستخدم');
+    error.statusCode = 403;
+    throw error;
+  }
+
   // منع تعديل حقول حساسة مباشرة من هنا
   delete updates.password;
   delete updates.role;

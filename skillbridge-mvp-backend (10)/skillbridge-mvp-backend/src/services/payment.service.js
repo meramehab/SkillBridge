@@ -7,7 +7,7 @@ const PLATFORM_FEE_PERCENT = 0.1; // 10% عمولة المنصة - قابلة ل
 const PAYMOB_BASE_URL = process.env.PAYMOB_BASE_URL || 'https://accept.paymob.com';
 
 // الدفع ممكن يكون لمشروع أو لكورس - الدالة دي بتحدد نوع العنصر وترجع بياناته
-const resolveItem = async ({ projectId, courseId }) => {
+const resolveItemAndAmount = async ({ projectId, courseId, reqAmount }) => {
   if (projectId) {
     const project = await Project.findById(projectId);
     if (!project) {
@@ -15,7 +15,12 @@ const resolveItem = async ({ projectId, courseId }) => {
       error.statusCode = 404;
       throw error;
     }
-    return { title: project.title, project: project._id, course: null };
+    if (!project.budget) {
+      const error = new Error('المشروع لا يملك ميزانية محددة للدفع');
+      error.statusCode = 400;
+      throw error;
+    }
+    return { title: project.title, project: project._id, course: null, amount: project.budget };
   }
 
   if (courseId) {
@@ -25,7 +30,8 @@ const resolveItem = async ({ projectId, courseId }) => {
       error.statusCode = 404;
       throw error;
     }
-    return { title: course.title, project: null, course: course._id };
+    // يجب تحديد السعر من قاعدة البيانات وعدم الاعتماد على المدخلات من العميل
+    return { title: course.title, project: null, course: course._id, amount: course.price };
   }
 
   const error = new Error('لازم تحددي مشروع أو كورس للدفع');
@@ -36,15 +42,15 @@ const resolveItem = async ({ projectId, courseId }) => {
 // إنشاء عملية دفع وتجميد الفلوس في الـ Escrow
 // MVP: لو PAYMENT_MODE=mock بيشتغل من غير أي API خارجي حقيقي
 const createEscrowPayment = async ({ projectId, courseId, clientId, amount }) => {
-  const item = await resolveItem({ projectId, courseId });
-  const platformFee = +(amount * PLATFORM_FEE_PERCENT).toFixed(2);
+  const item = await resolveItemAndAmount({ projectId, courseId, reqAmount: amount });
+  const platformFee = +(item.amount * PLATFORM_FEE_PERCENT).toFixed(2);
 
   const payment = await Payment.create({
     project: item.project,
     course: item.course,
     itemTitle: item.title,
     client: clientId,
-    amount,
+    amount: item.amount,
     platformFee,
     provider: 'paymob',
     providerTransactionId:
@@ -57,13 +63,20 @@ const createEscrowPayment = async ({ projectId, courseId, clientId, amount }) =>
 };
 
 // إفراج الفلوس للطالب بعد موافقة العميل على التسليم
-const releaseEscrowPayment = async (paymentId, studentId) => {
+const releaseEscrowPayment = async (paymentId, studentId, userAuth) => {
   const payment = await Payment.findById(paymentId);
   if (!payment) {
     const error = new Error('عملية الدفع مش موجودة');
     error.statusCode = 404;
     throw error;
   }
+  
+  if (payment.client.toString() !== userAuth.id && userAuth.role !== 'admin') {
+    const error = new Error('غير مصرح لك بإفراج هذه الدفعة');
+    error.statusCode = 403;
+    throw error;
+  }
+
   if (payment.status !== 'held_in_escrow') {
     const error = new Error('الفلوس دي مش في حالة تجميد قابلة للإفراج');
     error.statusCode = 400;
@@ -86,7 +99,12 @@ const refundPayment = async (paymentId) => {
     throw error;
   }
 
+  if (payment.status === 'refunded' || payment.paymentStatus === 'refunded') {
+    return payment;
+  }
+
   payment.status = 'refunded';
+  payment.paymentStatus = 'refunded';
   await payment.save();
   return payment;
 };
@@ -102,7 +120,7 @@ const getPaymentById = async (paymentId) => {
 // إنشاء عملية دفع حقيقية بـ Paymob (Intention API) - بيتطلب PAYMOB_SECRET_KEY, PAYMOB_INTEGRATION_ID في .env
 // المرجع الرسمي: https://developers.paymob.com/paymob-docs/developers/intention-apis/create-intention
 const createPaymobPaymentIntention = async ({ projectId, courseId, clientId, amount, billingData }) => {
-  const item = await resolveItem({ projectId, courseId });
+  const item = await resolveItemAndAmount({ projectId, courseId, reqAmount: amount });
 
   if (!process.env.PAYMOB_SECRET_KEY || !process.env.PAYMOB_INTEGRATION_ID) {
     const error = new Error('إعدادات Paymob مش متظبطة في .env (PAYMOB_SECRET_KEY / PAYMOB_INTEGRATION_ID)');
@@ -110,7 +128,7 @@ const createPaymobPaymentIntention = async ({ projectId, courseId, clientId, amo
     throw error;
   }
 
-  const platformFee = +(amount * PLATFORM_FEE_PERCENT).toFixed(2);
+  const platformFee = +(item.amount * PLATFORM_FEE_PERCENT).toFixed(2);
 
   // بننشئ سجل الدفع عندنا الأول (status: pending) عشان نستخدم الـ id بتاعه كـ special_reference
   // ده أهم حاجة تربط بين الدفعة عندنا وبين الـ webhook اللي هيرجع من Paymob بعدين
@@ -119,13 +137,13 @@ const createPaymobPaymentIntention = async ({ projectId, courseId, clientId, amo
     course: item.course,
     itemTitle: item.title,
     client: clientId,
-    amount,
+    amount: item.amount,
     platformFee,
     provider: 'paymob',
     status: 'pending',
   });
 
-  const amountCents = Math.round(amount * 100);
+  const amountCents = Math.round(item.amount * 100);
 
   const response = await fetch(`${PAYMOB_BASE_URL}/v1/intention/`, {
     method: 'POST',
@@ -212,13 +230,20 @@ const handlePaymobWebhook = async (transactionObj) => {
 
   const payment = await Payment.findById(specialReference);
   if (!payment) return null;
+  
+  // idempotency
+  if (payment.status === 'held_in_escrow' || payment.status === 'completed') {
+    return payment;
+  }
 
   if (transactionObj.success === true && transactionObj.pending === false) {
     payment.status = 'held_in_escrow';
+    payment.paymentStatus = 'completed';
     payment.heldAt = new Date();
     payment.providerTransactionId = String(transactionObj.id);
   } else if (transactionObj.pending !== true) {
     payment.status = 'failed';
+    payment.paymentStatus = 'failed';
   }
 
   await payment.save();
@@ -229,15 +254,15 @@ const handlePaymobWebhook = async (transactionObj) => {
 // مفيش API رسمي لفودافون كاش لرقم شخصي، فالنظام هنا "شبه يدوي وشغال فعليًا":
 // الطالب بيبعت طلب دفع، الطلب بيتسجل pending، والإدارة بتأكده يدويًا بعد ما تتأكد إن الفلوس وصلت فعليًا
 const createVodafoneCashRequest = async ({ projectId, courseId, clientId, amount, senderPhone, transactionRef }) => {
-  const item = await resolveItem({ projectId, courseId });
-  const platformFee = +(amount * PLATFORM_FEE_PERCENT).toFixed(2);
+  const item = await resolveItemAndAmount({ projectId, courseId, reqAmount: amount });
+  const platformFee = +(item.amount * PLATFORM_FEE_PERCENT).toFixed(2);
 
   const payment = await Payment.create({
     project: item.project,
     course: item.course,
     itemTitle: item.title,
     client: clientId,
-    amount,
+    amount: item.amount,
     platformFee,
     provider: 'vodafone_cash',
     providerTransactionId: transactionRef || senderPhone,
@@ -310,15 +335,33 @@ const processDirectCheckout = async ({ userId, courseId, projectId, amount, paym
       error.statusCode = 404;
       throw error;
     }
+    if (!project.budget) {
+      const error = new Error('المشروع لا يملك ميزانية محددة للدفع');
+      error.statusCode = 400;
+      throw error;
+    }
     itemTitle = project.title;
+  } else {
+    const error = new Error('يجب تحديد كورس أو مشروع للدفع');
+    error.statusCode = 400;
+    throw error;
   }
 
-  const finalAmount = amount || (course ? course.price : 0);
+  const isMockEnvironment = process.env.PAYMENT_MODE === 'mock' && process.env.NODE_ENV !== 'production';
+
+  if (paymentMethod === 'sandbox' && !isMockEnvironment) {
+    const error = new Error('طريقة الدفع التجريبية غير متاحة');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // استخدم السعر الفعلي للكورس من قاعدة البيانات، ولا تعتمد على المدخلات من الـ frontend
+  const finalAmount = course ? course.price : project.budget;
   const platformFee = +(finalAmount * PLATFORM_FEE_PERCENT).toFixed(2);
   const transactionId = `TXN-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
-  // إذا كان sandbox ومحدد له النجاح الفوري (MVP Testing Sandbox)
-  const isCompletedImmediately = sandboxAutoSucceed || paymentMethod === 'sandbox';
+  // إذا كان sandbox ومحدد له النجاح الفوري يجب أن يكون PAYMENT_MODE === 'mock' ولا يعمل في الـ production أبدًا
+  const isCompletedImmediately = isMockEnvironment && (sandboxAutoSucceed || paymentMethod === 'sandbox');
 
   const payment = await Payment.create({
     userId,
@@ -354,7 +397,7 @@ const processDirectCheckout = async ({ userId, courseId, projectId, amount, paym
 };
 
 // التحقق من الدفع وتأكيده (verify)
-const verifyPaymentCompletion = async ({ transactionId, paymentId, status = 'completed' }) => {
+const verifyPaymentCompletion = async ({ transactionId, paymentId, status = 'completed' }, userAuth) => {
   const User = require('../models/User');
   const query = {};
   if (paymentId) query._id = paymentId;
@@ -371,6 +414,25 @@ const verifyPaymentCompletion = async ({ transactionId, paymentId, status = 'com
     error.statusCode = 404;
     throw error;
   }
+  
+  // منع الـ frontend من تأكيد أي عملية دفع ما لم تكن sandbox في بيئة التطوير
+  const isMockEnvironment = process.env.PAYMENT_MODE === 'mock' && process.env.NODE_ENV !== 'production';
+  if (!isMockEnvironment) {
+    const error = new Error('غير مصرح بتأكيد عملية دفع حقيقية من واجهة المستخدم');
+    error.statusCode = 403;
+    throw error;
+  }
+
+  const targetUserId = payment.userId || payment.client;
+  if (targetUserId && targetUserId.toString() !== userAuth.id && userAuth.role !== 'admin') {
+    const error = new Error('غير مصرح لك بتأكيد هذه المعاملة');
+    error.statusCode = 403;
+    throw error;
+  }
+
+  if (payment.paymentStatus === 'completed' || payment.paymentStatus === 'success') {
+    return payment;
+  }
 
   const isSuccess = status === 'completed' || status === 'success';
   payment.paymentStatus = isSuccess ? 'completed' : 'failed';
@@ -382,7 +444,6 @@ const verifyPaymentCompletion = async ({ transactionId, paymentId, status = 'com
 
   // تفعيل الكورس للمستخدم إذا كان الدفع لكورس وناجح
   const targetCourseId = payment.courseId || payment.course;
-  const targetUserId = payment.userId || payment.client;
   if (isSuccess && targetCourseId && targetUserId) {
     await User.findByIdAndUpdate(targetUserId, {
       $addToSet: { enrolledCourses: targetCourseId },

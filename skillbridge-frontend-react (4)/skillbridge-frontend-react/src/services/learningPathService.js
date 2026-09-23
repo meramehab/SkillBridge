@@ -19,7 +19,7 @@ export async function getLearningPath() {
     return mockGetLearningPath();
   }
 
-  const { data } = await apiClient.get("/learning-path/me");
+  const { data } = await apiClient.get("/learning-path");
   return data;
 }
 
@@ -33,7 +33,7 @@ export async function updateStepStatus(stepId, status) {
     return mockUpdateStepStatus(stepId, status);
   }
 
-  const { data } = await apiClient.patch(`/learning-path/steps/${stepId}/status`, { status });
+  const { data } = await apiClient.put(`/learning-path/modules/${stepId}`, { completed: status === "completed" });
   return data;
 }
 

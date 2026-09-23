@@ -50,6 +50,9 @@ export async function getCareerReadinessScore() {
     return { score: 82, verifiedSkillsCount: 4 };
   }
 
-  const { data } = await apiClient.get("/skills/readiness-score");
-  return data;
+  const { data } = await apiClient.get("/student-dashboard");
+  return {
+    score: data?.profile?.careerReadinessScore || 0,
+    verifiedSkillsCount: data?.profile?.skills?.length || 0
+  };
 }

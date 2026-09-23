@@ -58,7 +58,9 @@ const sanitizeInputs = (req, res, next) => {
 
 // إنشاء توكن وصول مؤقت وموقع لمحتوى الفيديو المحمي
 const generateSignedMediaToken = (userId, courseId, lessonId) => {
-  const secret = process.env.JWT_SECRET || 'skillbridge-secret-key-fallback';
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw new Error('بيئة العمل غير مهيأة بشكل صحيح: مفقود JWT_SECRET');
+  
   const expiresAt = Date.now() + 60 * 60 * 1000; // صلاحية لساعة واحدة
   const payload = `${userId}:${courseId}:${lessonId}:${expiresAt}`;
   const signature = crypto.createHmac('sha256', secret).update(payload).digest('hex');
@@ -68,7 +70,9 @@ const generateSignedMediaToken = (userId, courseId, lessonId) => {
 // التحقق من صلاحية توكن الفيديو
 const verifySignedMediaToken = (token) => {
   try {
-    const secret = process.env.JWT_SECRET || 'skillbridge-secret-key-fallback';
+    const secret = process.env.JWT_SECRET;
+    if (!secret) return false;
+    
     const jsonStr = Buffer.from(token, 'base64url').toString('utf8');
     const { payload, signature } = JSON.parse(jsonStr);
 
